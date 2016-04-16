@@ -11,27 +11,36 @@ import matplotlib.pyplot as plt
 import os.path
 import pandas as pd
 import numpy as np
+import re
+import timeit
 
 # Create stock object, with stockName and database (that data is saved to)
 class Stock(object):
     def __init__(self, stockName):
         self.stockName = stockName
         day,month,year = todaysDate()
-        #self.URL = 'https://nz.finance.yahoo.com/q/hp?s='+self.stockName+'&a=09&b=10&c=1800&d='+month+'&e='+day+'&f='+year+'&g=d&z=66&y='
-        self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d='+month+'&e='+day+'&f='+year+'&g=d&a=09&b=10&c=1800&z=66&y='        
+        self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d='+month+'&e='+day+'&f='+year+'&g=d&a=01&b=01&c=1970&z=66&y='        
                
     # initialStockScrape()
-    def initialStockScrape(self):
+    def stockScrape(self):
         # function which does the first time initialization of the stock and 
         #downloads all past stock data, returns array of dates, and array of data
         #initializes arrays
-        dateTable=[]
-        openTable=[]
+        
+        #If the data has already been downloaded don't redownload it
+        if  os.path.isfile(self.stockName + '_data.csv'):
+            return pd.read_csv(self.stockName + '_data.csv')
+        
+        print self.stockName
+                        
+        stockDataFrame =  pd.DataFrame({'Date':[], 'Open':[], 'High':[], 'Low':[],\
+                    'Close':[], 'Volume':[], 'AdjClose':[]});
+        colName = ['Date','Open','High','Low','Close','Volume','AdjClose']
         #putting into a loop to download all pages of data
         done = False
         m=0    
         while not done:
-            tableTemp=[]
+            rowTemp=[]
             #print m
             URLPage = self.URL+str(m)        
             #creates soup and dowloads data
@@ -41,69 +50,56 @@ class Stock(object):
             if table==None:
                 done = True
                 break                
+            
             #takes data from soup and processes it into a way that can be used 
             for td in table.tr.findAll("td"):
+                #print td
                 if td.string != None:                    
                     #Only get stock data
                     if 'Dividend' not in td.string and '/' not in td.string:
-                        tableTemp.append(td.string)           
-            #only intersted in data for date and opening price
-            for n in range(len(tableTemp)/7):
-                #Check if we are scraping a page which has data on it which has already
-                # been downloaded. If so break out of loop
-                if tableTemp[7*n] in dateTable:
-                    done = True
-                    break
-                #append data to tables
-                dateTable.append(tableTemp[7*n])
-                openTable.append(float(tableTemp[7*n+1]))
+                        #tableTemp.append(td.string)
+                        rowTemp.append(td.string)
+                        # Add entire row to dataFrame
+                        if len(rowTemp)%7==0:
+                            #print pd.DataFrame([rowTemp], columns=colName)
+                            stockDataFrame = stockDataFrame.append(pd.DataFrame([rowTemp], columns=colName), ignore_index=True)
+                            #Clear rowTemp
+                            rowTemp = []
+            
             #increment m
             m+=66
+            print m
         
-        #Returns panda array of scraped data
-        return dateTable, openTable
+        # Save as csv
+        stockDataFrame.to_csv(self.stockName + '_data.csv')
+        # Returns panda array of scraped data
+        return stockDataFrame
+
                
     
     # plotStockData(initialDate,finalDate)
     def plotStockData(self, percentage='n',initialDate=None, finalDate=None):
         # calls readDatabase, then uses pylab to plot the stock data from initialDate
         # to finalDate. Defaults are minDate and maxDate.
-        
-        # Reads data to be plotted from database
-        dateTable,openTable,nameTable = self.readDatabase()
-        
-        #converts date data into a type that can be used  
-        dateTable = convertDate(dateTable) 
-               
-        #Sets initialDate and finalDate
-        if initialDate==None:
-            initN=0
-        else:
-            minDelta=abs(dateTable[0]-convertDate(initialDate))
-            for nInit in range(len(dateTable)):
-                tDelta = abs(dateTable[nInit]-convertDate(initialDate))
-                if tDelta<=minDelta:
-                    minDelta = tDelta
-                    initN = nInit
-            
-        if finalDate==None:
-            finN=None
-        else:
-            minDelta=abs(dateTable[-1]-convertDate(finalDate))
-            for nFin in range(len(dateTable)):
-                tDelta = abs(dateTable[nFin]-convertDate(finalDate))
-                if tDelta<=minDelta:
-                    minDelta = tDelta
-                    finN=nFin+1
+        #Read in stock data
+        stockDataFrame = pd.read_csv(self.stockName + '_data.csv')
+        dateData = stockDataFrame["Date"].tolist()
+        openData = stockDataFrame["Open"]
+                
+        #converts data into a type that can be used      
+        dateData = convertDate(dateData)
+        openData = [float(''.join(re.split('\,',i))) for i in openData]       
         
         #converts it to percentage
         if percentage=='y':
-            firstPrice = float(openTable[initN])
-            for n in range(len(openTable)): openTable[n]*=100/firstPrice        
+            #firstPrice = float(openData[initN])
+            firstPrice = float(openData[len(dateData)-1])
+            for n in range(len(openData)): openData[n]*=100/firstPrice        
         
         #plots data
         plt.figure()
-        plt.plot_date(dateTable[initN:finN],openTable[initN:finN],'-o')
+        #plt.plot_date(dateData[initN:finN],openData[initN:finN],'-o')
+        plt.plot_date(dateData,openData,'-')
         plt.xlabel('Date')
         if percentage=='y':
             plt.ylabel('Percentage')
@@ -113,47 +109,20 @@ class Stock(object):
         plt.show()       
 
 # convertDate(dateString)
-def convertDate(dateStringArray):
-    #takes a date input as an array of strings in the format 'yyyy-mm-dd' and converts it to
+def convertDate(dateString):
+    #takes a date input as a list of strings in the format 'mmm d, yyyy' and converts it to
     #a date object
-    if type(dateStringArray)==list:
-        #loop over the array
-        for n in range(len(dateStringArray)):
-            #Sometimes need to force it to be a string
-            dateStringArray[n] = str(dateStringArray[n])
-            #splits the string
-            splitDate = str.split(dateStringArray[n],'-')
-            # cconverts the date into date object
-            dateStringArray[n] = datetime.date(int(splitDate[0]),int(splitDate[1]),int(splitDate[2]))
-    #Or if its just a string
-    else:
-        #Sometimes need to force it to be a string
-        dateStringArray = str(dateStringArray)
-        #splits the string
-        splitDate = str.split(dateStringArray,'-')
-        # cconverts the date into date object
-        dateStringArray = datetime.date(int(splitDate[0]),int(splitDate[1]),int(splitDate[2]))  
-    return dateStringArray
-
-        
-# convertDateSQL
-def convertDateSQL(dateString):
-    #takes a date input in the format 'd mmm yyyy' and converts it to a format that
-    #can be sorted in SQL 'yyyy-mm-dd'
     # a dictionary to convert months to a number
     monthDict = {'Jan': '01', 'Feb':'02', 'Mar':'03','Apr':'04','May':'05','Jun':'06',
     'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-    #Sometimes need to force it to be a string
-    dateString = str(dateString)
-    #splits the string
-    splitDate = str.split(dateString)
-    # converts the date into new format yyyy-mm-dd
-    if int(splitDate[0])<10:
-        newDateString = splitDate[2]+'-'+monthDict[splitDate[1]]+'-0'+splitDate[0]
-    else:
-        newDateString = splitDate[2]+'-'+monthDict[splitDate[1]]+'-'+splitDate[0]
-    return newDateString
     
+    for n in range(len(dateString)):
+        #splits the string
+        splitDate = re.split('\W+',dateString[n])
+        #print splitDate
+        # cconverts the date into date object
+        dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[0]]),int(splitDate[1])) #y,m,d
+    return dateString   
 
 #todaysDate()
 def todaysDate():
@@ -172,18 +141,35 @@ def todaysDate():
         
     return day, month, year
 
-
-
-def main():          
-    # main file, which adds stocks to be checked, initializes each, updates each
-    # and does the plotting
+# and does the plotting
  
-    plt.close("all")
+plt.close("all")
     
-    #S&P500 
-    SP500 = Stock('^GSPC')
-    SP500.updateStockData()
-    SP500.plotStockData('n','2015-01-01','2017-01-01')
+#USA S&P500 
+SP500 = Stock('^GSPC')
+SP500.stockScrape()
+SP500.plotStockData(percentage='n')
+    
+#China Shanghai Composite
+SSEC = Stock('000001.SS')
+SSEC_stockData = SSEC.stockScrape()
+SSEC.plotStockData(percentage='n')
+
+#Japan Nikei 225
+N225 = Stock('^N225')
+N225_stockData = N225.stockScrape()
+N225.plotStockData(percentage='n')
+
+#Australia S&P/ASX200
+ASX = Stock('^AXJO')
+ASX_stockData = ASX.stockScrape()
+ASX.plotStockData(percentage='n')
+
+#England FTSE100
+FTSE = Stock('^FTSE')
+FTSE_stockData = FTSE.stockScrape()
+FTSE.plotStockData(percentage='n')
+
+
       
            
-main()
