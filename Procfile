@@ -1,1 +1,1 @@
-web: python dealscraper/Stock_Correlations.py
+web: python Stock_Correlations.py
