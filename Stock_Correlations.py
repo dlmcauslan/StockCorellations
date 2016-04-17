@@ -285,18 +285,14 @@ def correlationsPlots():
     
     #Plots data using Bokeh
     pTest = figure(plot_width=1200, plot_height=700, title="Correlations with S&P500")
-    pTest.line(yearDataSP500SSEC, correlationSP500SSEC, line_width=2, line_color="red")
-    pTest.circle(yearDataSP500SSEC, correlationSP500SSEC, line_width=2, line_color="red", legend = "SSEC", fill_color="white", size=10)
-    pTest.line(yearDataSP500N225, correlationSP500N225, line_width=2)
-    pTest.circle(yearDataSP500N225, correlationSP500N225, line_width=2, legend = "N225", fill_color="white", size=10)
-    pTest.line(yearDataSP500ASX, correlationSP500ASX, line_width=2, line_color="orange")
-    pTest.circle(yearDataSP500ASX, correlationSP500ASX, line_width=2, line_color="orange", legend = "ASX", fill_color="white", size=10)
-    pTest.line(yearDataSP500FTSE, correlationSP500FTSE, line_width=2, line_color="purple")
-    pTest.circle(yearDataSP500FTSE, correlationSP500FTSE, line_width=2, line_color="purple", legend = "FTSE", fill_color="white", size=10)
-    
+    pTest.line(yearDataSP500SSEC, correlationSP500SSEC, line_width=2, line_color="red", legend = "SSEC")
+    pTest.line(yearDataSP500N225, correlationSP500N225, line_width=2, legend = "N225")
+    pTest.line(yearDataSP500ASX, correlationSP500ASX, line_width=2, line_color="orange", legend = "ASX")
+    pTest.line(yearDataSP500FTSE, correlationSP500FTSE, line_width=2, line_color="purple", legend = "FTSE")
     pTest.xaxis.axis_label = "Year"
     pTest.yaxis.axis_label = "Correlation"
-    pTest.legend.location = "bottom_left"
+    pTest.legend.location = "top_left"
+
     script, div = components(pTest)
     return render_template("simpleline.html", script=script, div=div)
     show(pTest)
