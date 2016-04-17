@@ -1,4 +1,4 @@
-####                   Stock Corellations.py
+####                   Stock_Correlations.py
 ''' Data science project that downloads stock data from yahoo finance, and 
 calculates corellations over time.
 Created: 16/04/2016
@@ -18,7 +18,6 @@ from bokeh.embed import components
 from bokeh.models import DatetimeTickFormatter
 from bokeh.charts import Bar
 from flask import Flask, render_template
-from collections import OrderedDict
 #output_notebook()
 
 # Create stock object, with stockName and database (that data is saved to)
@@ -312,6 +311,7 @@ def correlationsBar():
     show(pTest)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    #app.run(debug=True)
+    app.run(port=33507)
       
            
