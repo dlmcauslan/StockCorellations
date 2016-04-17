@@ -243,6 +243,7 @@ app = Flask(__name__)
 # Define our URLs and pages.
 @app.route('/')
 def stockPlots():
+    # Load the index data so that it can be plotted
     dateDataSP500, openDataSP500 = SP500.convertPlotData(percentage='y')
     dateDataSSEC, openDataSSEC = SSEC.convertPlotData(percentage='y')
     dateDataN225, openDataN225 = N225.convertPlotData(percentage='y')  
@@ -269,6 +270,7 @@ def stockPlots():
     
 @app.route('/correlations')
 def correlationsPlots():
+    # Calculate correlations for different indices and the S&P500
     yearDataSP500SSEC, correlationSP500SSEC = stockCorrelation(SP500,SSEC)
     yearDataSP500N225, correlationSP500N225 = stockCorrelation(SP500,N225)
     yearDataSP500ASX, correlationSP500ASX = stockCorrelation(SP500,ASX)
@@ -290,14 +292,19 @@ def correlationsPlots():
     
 @app.route('/correlationsBar')
 def correlationsBar():
+    # Creates a bar plot showing the fraction of years that correlations have gone
+    # below 0.
+    # Create a dictionary of the different pairs of stocks for correlations calculations
     combinations = {'SP500-SSEC':[SP500,SSEC],'SP500-N225':[SP500,N225],'SP500-ASX':[SP500,ASX], 
                 'SP500-FTSE':[SP500,FTSE],'SSEC-N225':[SSEC,N225],'SSEC-ASX':[SSEC,ASX],
                 'SSEC-FTSE':[SSEC,FTSE],'N225-ASX':[N225,ASX],'N225-FTSE':[N225,FTSE],'ASX-FTSE':[ASX,FTSE]}
-
+    
+    #Calculate the fraction of years that the correlations were less than 0
     fracNeg =[]
     for x in combinations.keys():
         fracNeg.append(negativeCorrelation(combinations[x][0],combinations[x][1]))
-    
+   
+    # Add data to dataframe for plotting 
     dictTest = {'values':fracNeg, 'names':combinations.keys()}
     df = pd.DataFrame(dictTest)
     
@@ -325,7 +332,7 @@ def testPlot():
     show(pTest)
 
 if __name__ == '__main__':
-    app.run(debug=True)
-    #app.run(port=33507)
+    #app.run(debug=True)
+    app.run(port=33507)
       
            
