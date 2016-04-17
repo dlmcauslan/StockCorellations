@@ -13,8 +13,9 @@ from bokeh.charts import Bar
 from bs4 import BeautifulSoup
 import datetime
 from flask import Flask, render_template
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
+import os
 import os.path
 import pandas as pd
 import re
@@ -339,6 +340,7 @@ def testPlot():
 
 if __name__ == '__main__':
     #app.run(debug=True)
-    app.run(port=33507)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
       
            
