@@ -4,20 +4,22 @@ calculates corellations over time.
 Created: 16/04/2016
 '''
 #Import libraries to use
-import urllib2
-from bs4 import BeautifulSoup
-import datetime
-import matplotlib.pyplot as plt
-import os.path
-import pandas as pd
-import numpy as np
-import re
+
 from bokeh.io import output_notebook, show
 from bokeh.plotting import figure
 from bokeh.embed import components
 from bokeh.models import DatetimeTickFormatter
 from bokeh.charts import Bar
+from bs4 import BeautifulSoup
+import datetime
 from flask import Flask, render_template
+import matplotlib.pyplot as plt
+import numpy as np
+import os.path
+import pandas as pd
+import re
+import urllib2
+
 #output_notebook()
 
 # Create stock object, with stockName and database (that data is saved to)
@@ -31,15 +33,16 @@ class Stock(object):
     def stockScrape(self):
         # function which does the first time initialization of the stock and 
         #downloads all past stock data, returns array of dates, and array of data
-        #initializes arrays
         
         #If the data has already been downloaded don't redownload it
         if  os.path.isfile(self.stockName + '_data.csv'):
             return pd.read_csv(self.stockName + '_data.csv')
-          
+        
+        # Initialize pandas dataframe to hold stock data    
         stockDataFrame =  pd.DataFrame({'Date':[], 'Open':[], 'High':[], 'Low':[],\
                     'Close':[], 'Volume':[], 'AdjClose':[]});
         colName = ['Date','Open','High','Low','Close','Volume','AdjClose']
+        
         #putting into a loop to download all pages of data
         done = False
         m=0    
@@ -104,7 +107,7 @@ class Stock(object):
         dateData = stockDataFrame["Date"].tolist()
         openData = stockDataFrame["Open"]
                 
-        #converts data into a type that can be used      
+        #converts data into a type that can be used (Cleans numeric data)    
         dateData = convertDate(dateData)
         openData = [float(''.join(re.split('\,',i))) for i in openData]       
         
@@ -129,7 +132,6 @@ def convertDate(dateString):
     for n in range(len(dateString)):
         #splits the string
         splitDate = re.split('\W+',dateString[n])
-        #print splitDate
         # cconverts the date into date object
         dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[0]]),int(splitDate[1])) #y,m,d
     return dateString   
@@ -160,9 +162,10 @@ def stockCorrelation(stockA, stockB):
     dateDataB = convertDate(stockDataFrameB["Date"].tolist())
     yearA = [n.year for n in dateDataA]
     yearB = [n.year for n in dateDataB]
+    # Add a column to the data frame for the year
     stockDataFrameA["Year"] = yearA
     stockDataFrameB["Year"] = yearB
-    #openData = stockDataFrame["Open"]
+    # Add a column to the dataframe with clean price information
     stockDataFrameA["OpenClean"] = [float(''.join(re.split('\,',i))) for i in stockDataFrameA["Open"]]
     stockDataFrameB["OpenClean"] = [float(''.join(re.split('\,',i))) for i in stockDataFrameB["Open"]]
     
@@ -170,14 +173,14 @@ def stockCorrelation(stockA, stockB):
     minYear = max(min(yearA), min(yearB))+1
     # Years to iterate over
     years = range(minYear,datetime.date.today().year)
-    #years = [1991, 1995, 1999]
+    # Create empty numpy arrays to store data in
     meanA = np.zeros(len(years))
     stdA = np.zeros(len(years))
     meanB = np.zeros(len(years))
     stdB = np.zeros(len(years))
     cover = np.zeros(len(years))
     
-    #print stockDataFrameB
+    # Iterate over years
     for n in range(len(years)):
         # Calculate some properties of A
         tmpDataA = stockDataFrameA.OpenClean[stockDataFrameA["Year"]==years[n]]
