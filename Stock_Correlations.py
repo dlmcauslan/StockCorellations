@@ -201,9 +201,13 @@ def stockCorrelation(stockA, stockB):
 
 # Calculate the fraction of years that have a negative correlation
 def negativeCorrelation(stockA, stockB):
+    #Calculate the correlations between Index A and B for each year
     years, correlation = stockCorrelation(stockA, stockB) 
+    # Find what years the correlations are negative
     boolVect = np.array(correlation)<0
+    # Count the number of negative years
     numNegatives = sum(boolVect)
+    # Calculate the fraction of negative years
     fractionNegative = numNegatives/float(len(correlation))
     return fractionNegative
    
@@ -238,7 +242,6 @@ yearData, correlationSP500SSEC = stockCorrelation(SP500,SSEC)
 fracNegB = negativeCorrelation(SP500,SSEC)
 
 app = Flask(__name__)
-#Some coments
 
 # Define our URLs and pages.
 @app.route('/')
