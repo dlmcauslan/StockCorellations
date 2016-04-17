@@ -248,7 +248,7 @@ fracNegB = negativeCorrelation(SP500,SSEC)
 app = Flask(__name__)
 
 # Define our URLs and pages.
-@app.route('/')
+@app.route('/stockPlots')
 def stockPlots():
     # Load the index data so that it can be plotted
     dateDataSP500, openDataSP500 = SP500.convertPlotData(percentage='y')
@@ -337,10 +337,14 @@ def testPlot():
     script, div = components(pTest)
     return render_template("simpleline.html", script=script, div=div)
     show(pTest)
+    
+@app.route("/")
+def hello():
+    return "Hello world!"
 
 if __name__ == '__main__':
-    #app.run(debug=True)
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
+    #port = int(os.environ.get("PORT", 5000))
+    #app.run(host='0.0.0.0', port=port)
       
            
