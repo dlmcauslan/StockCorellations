@@ -4,7 +4,7 @@ calculates corellations over time.
 Created: 16/04/2016
 '''
 #Import libraries to use
-from bokeh.io import show, #output_notebook
+from bokeh.io import show #, output_notebook
 from bokeh.plotting import figure
 from bokeh.embed import components
 from bokeh.models import DatetimeTickFormatter
