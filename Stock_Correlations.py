@@ -4,8 +4,7 @@ calculates corellations over time.
 Created: 16/04/2016
 '''
 #Import libraries to use
-
-from bokeh.io import output_notebook, show
+from bokeh.io import show, #output_notebook
 from bokeh.plotting import figure
 from bokeh.embed import components
 from bokeh.models import DatetimeTickFormatter
@@ -215,8 +214,7 @@ def negativeCorrelation(stockA, stockB):
     fractionNegative = numNegatives/float(len(correlation))
     return fractionNegative
    
-#plt.close("all")
-    
+### Code for downloading data and plotting in a Jupyter notebook    
 #USA S&P500 
 SP500 = Stock('^GSPC')
 SP500.stockScrape()
@@ -245,6 +243,8 @@ FTSE.plotStockData(percentage='n')
 yearData, correlationSP500SSEC = stockCorrelation(SP500,SSEC)
 fracNegB = negativeCorrelation(SP500,SSEC)
 
+
+# Create Flask app
 app = Flask(__name__)
 
 # Define our URLs and pages.
@@ -323,24 +323,6 @@ def correlationsBar():
     script, div = components(pTest)
     return render_template("simpleline.html", script=script, div=div)
     show(pTest)
-    
-@app.route('/testPlot')
-def testPlot():    
-    #Plots data using Bokeh
-    pTest = figure(plot_width=1200, plot_height=700, title="Stock Indices")
-    pTest.line([1,2,3,4,5,6,7], [2, 1, 8, 7, 1, 4, 6], line_width=2, line_color="green", legend = "S&P 500")
-    pTest.line([1,2,3,4,5,6,7], [7, 9, 9, 1, 1, 5, 2], line_width=2, line_color="red", legend="SSEC")
-    pTest.xaxis.axis_label = "Date"
-    pTest.yaxis.axis_label = "Percentage change (%)"
-    pTest.legend.location = "top_left"
-      
-    script, div = components(pTest)
-    return render_template("simpleline.html", script=script, div=div)
-    show(pTest)
-    
-@app.route("/")
-def hello():
-    return "Hello world!"
 
 if __name__ == '__main__':
     #app.run(debug=True)
