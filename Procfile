@@ -1,1 +1,1 @@
-web: python Stock_Correlations.py
+web: gunicorn app:app
