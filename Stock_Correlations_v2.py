@@ -9,15 +9,15 @@ Modified: 25/04/2016
     that describes which stock it is. This is instead of saving as a csv file.
     
     To do:
-    Change current function to an initial stockscrape function, then add an update
-    stock data function. 
-    Figure out sorting by date in SQL, if can change format to make it more
-    compatible with datetime in python. 
-    Figure out plotting by day, month or year by moddifying SQL calls.
     Plot different plots on single graph - return plot handle in plot function.
     Readd plotting corellations etc
     Get Bokeh plots working, maybe
 '''
+
+########## Need to come up with new URL plan because it doesn't work over the weekends! - might need to add a break statement instead
+########## Remember to change testURL in updateStockData - Fix URLs
+
+
 #Import libraries to use
 from bokeh.io import show, output_notebook
 from bokeh.plotting import figure
@@ -40,17 +40,42 @@ class Stock(object):
     def __init__(self, stockName, databasePath):
         self.stockName = stockName
         self.databasePath = databasePath
-        day,month,year = todaysDate()
-        self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d='+month+'&e='+day+'&f='+year+'&g=d&a=01&b=01&c=2015&z=66&y='        
+        self.day,self.month,self.year = todaysDate()
+        self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d='+self.month+'&e='+self.day+'&f='+self.year+'&g=d&a=00&b=01&c=1970&z=66&y='   #Note if changing minimum date here, also need to change the default minDate in stockScrape()    
+    
+    # updateStockData()
+    def updateStockData(self):
+        # Checks whether stock is in database, if not it runs initialStockScrape.
+        #If it is in data base it checks whether the stock information is up to date (checks dataBase) and if
+        # not, runs updateStockScrape()
+        # Reads database
+        format_str = """SELECT StockCode FROM stocks WHERE StockCode = '{name}'; """
+        sqlQuery = format_str.format(name = self.stockName)
+        print sqlQuery
+        stockData = self.readDatabase(sqlQuery)
                
-    # initialStockScrape()
-    def stockScrape(self):
+        # Checks whether any previous data has been added for the particular stock code
+        # if not then run initialStockScrape to get all past data
+        if stockData.empty:
+            print 'Running stockScrape() on '+self.stockName+'. --First run.'
+            #self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d=02&e=25&f=2016&g=d&a=00&b=01&c=2015&z=66&y=' #Test URL
+            self.stockScrape()
+        else:
+            #access database to get latestDate
+            print 'Running stockScrape() on '+self.stockName+'. --Updating data.'
+            # Performs SQL query to get the latest stock data date in database
+            format_str = """SELECT StockCode, max(Date) AS Date FROM stocks WHERE StockCode = '{name}' GROUP BY StockCode"""
+            sqlQuery = format_str.format(name = self.stockName)
+            y = self.readDatabase(sqlQuery)
+            minDate = y.Date[0]
+            # Updates stock data
+            self.stockScrape(minDate)                     
+    
+    
+    # stockScrape()
+    def stockScrape(self, minDate = '1971-01-01'):
         # function which does the first time initialization of the stock and 
         #downloads all past stock data, returns array of dates, and array of data
-        
-        #If the data has already been downloaded don't redownload it
-        #if  os.path.isfile(self.stockName + '_data.csv'):
-            #return pd.read_csv(self.stockName + '_data.csv')
         
         # Initialize pandas dataframe to hold stock data    
         stockDataFrame =  pd.DataFrame({'Date':[], 'Open':[], 'High':[], 'Low':[],\
@@ -59,10 +84,11 @@ class Stock(object):
         
         #putting into a loop to download all pages of data
         done = False
-        m=0    
+        m=0
+           
         while not done:
             rowTemp=[]
-            #print m
+            print m,
             URLPage = self.URL+str(m)        
             #creates soup and dowloads data
             soup = BeautifulSoup(urllib2.urlopen(URLPage).read())
@@ -70,6 +96,7 @@ class Stock(object):
             #breaks loop if it doesnt find a table
             if table==None:
                 done = True
+                print "Table=None"
                 break                
             
             #takes data from soup and processes it into a way that can be used 
@@ -78,19 +105,22 @@ class Stock(object):
                 if td.string != None:                    
                     #Only get stock data
                     if 'Dividend' not in td.string and '/' not in td.string:
-                        #tableTemp.append(td.string)
                         rowTemp.append(td.string)
                         # Add entire row to dataFrame
                         if len(rowTemp)%7==0:
-                            #print pd.DataFrame([rowTemp], columns=colName)
+                            # If date is less than the minimum date then stop getting data
+                            if convertDate([rowTemp[0]])[0] <= minDate:
+                                print convertDate([rowTemp[0]])[0]
+                                print minDate
+                                done = True
+                                break                                
                             stockDataFrame = stockDataFrame.append(pd.DataFrame([rowTemp], columns=colName), ignore_index=True)
                             #Clear rowTemp
                             rowTemp = []
             
             #increment m
             m+=66
-            print m
-        
+                    
         # Cleans the numerical data before saving
         dataClean(stockDataFrame)
         
@@ -103,8 +133,7 @@ class Stock(object):
         stockDataFrame.to_csv(self.stockName + '_data.csv')
         # Add to SQL database
         self.addToDatabase(stockDataFrame)
-        # Returns panda array of scraped data
-        return stockDataFrame
+      
         
     # addToDatabase()
     def addToDatabase(self,dataFrame):
@@ -123,9 +152,13 @@ class Stock(object):
         conn.close() 
         return dataFrame   
 
-    def plotStockData(self, percentage='n', plottype='m'):
+    def plotStockData(self, percentage='n', plottype='m', startDate='1800-01-01', endDate='2200-01-01', dayMonthYear = 'd'):
+        # Percentage 'y' or 'n' whether you want the y axis as a percentage or not.
+        # Plot type 'm' for matplotlib or 'b' for Bokeh (if using ipython/jupyter)
+        # startDate and endDate are the plotting range, input as 'yyyy-mm-dd'
+        # dayMonthYear - whether you want the data plotted daily 'd', monthly 'm', quarterly 'q', or yearly 'y'.
         #Read in stock data
-        dateData, openData = self.convertPlotData(percentage='n')
+        dateData, openData = self.convertPlotData(startDate, endDate, percentage, dayMonthYear)
         
         if plottype == 'm':
             self.plotStockDataMatplotlib(dateData, openData, percentage)
@@ -145,45 +178,66 @@ class Stock(object):
         else:
             plt.ylabel('Index Level')
         plt.title(self.stockName)
-        plt.show()   
+        plt.show()
+           
             
     # plotStockDataBokeh(initialDate,finalDate)
     def plotStockDataBokeh(self, dateData, openData, percentage):
         output_notebook()
         #Plots Stock Data using Bokeh (in iPython or Jupyter notebook)        
         #Plots data
-        plt = figure(plot_width=500, plot_height=500, title="Stock Indices")
-        plt.line(dateData, openData, line_width=2)
-        plt.xaxis.axis_label = "Date"
+        p = figure(plot_width=500, plot_height=500, title="Stock Indices")
+        p.line(dateData, openData, line_width=2)
+        p.xaxis.axis_label = "Date"
         if percentage=='y':
-            plt.yaxis.axis_label('Percentage')
+            p.yaxis.axis_label('Percentage')
         else:
-            plt.yaxis.axis_label('Index Level')
-        show(plt) # show the results 
-        return plt
+            p.yaxis.axis_label('Index Level')
+        show(p) # show the results 
+        return p
         
     # convertPlotData(initialDate,finalDate)
-    def convertPlotData(self, percentage='n'):
-        # calls readDatabase, then uses pylab to plot the stock data from initialDate
-        # to finalDate. Defaults are minDate and maxDate.
+    def convertPlotData(self, startDate, endDate, percentage, dayMonthYear):
+        # calls readDatabase, then converts database data to a format that can be plotted easily
         #Read in stock data
-        '''stockDataFrame = pd.read_csv(self.stockName + '_data.csv')'''
-        format_str = """SELECT StockCode, Date, Open 
-                        FROM stocks
-                        WHERE StockCode = '{name}'; """
-        sqlQuery = format_str.format(name = self.stockName)
+        if dayMonthYear == 'd':
+            format_str = """SELECT StockCode, Date, Open 
+                            FROM stocks
+                            WHERE StockCode = '{name}' AND Date BETWEEN '{sDate}' AND '{eDate}'
+                            ORDER BY Date DESC """
+        elif dayMonthYear == 'm':
+            format_str = """SELECT StockCode, min(Date) AS Date, strftime('%m', Date) AS Month, strftime('%Y', Date) AS Year, Open 
+                        FROM stocks 
+                        WHERE StockCode = '{name}' AND Date BETWEEN '{sDate}' AND '{eDate}'
+                        GROUP BY Year, Month 
+                        ORDER BY Date DESC"""
+        elif dayMonthYear == 'q':
+            format_str = """SELECT StockCode, min(Date) AS Date, strftime('%m', Date) AS Month, strftime('%Y', Date) AS Year, Open 
+                        FROM stocks 
+                        WHERE StockCode = '{name}' AND Date BETWEEN '{sDate}' AND '{eDate}'
+                        GROUP BY Year, Month
+                        HAVING Month IN ('01', '04', '07', '10') 
+                        ORDER BY Date DESC"""
+        elif dayMonthYear == 'y':
+            format_str = """SELECT StockCode, min(Date) AS Date, strftime('%Y', Date) AS Year, Open 
+                        FROM stocks 
+                        WHERE StockCode = '{name}' AND Date BETWEEN '{sDate}' AND '{eDate}'
+                        GROUP BY Year 
+                        ORDER BY Date DESC"""
+        else:
+            print "Invalid plot frequency."
+        sqlQuery = format_str.format(name = self.stockName, sDate = startDate, eDate = endDate)
         stockDataFrame = self.readDatabase(sqlQuery)
         dateData = stockDataFrame["Date"].tolist()
         openData = stockDataFrame["Open"]
                 
         #converts date data into a type that can be used   
-        dateData = convertDate(dateData)
+        dateData = convertDateSQL(dateData)
        
         #converts it to percentage
         if percentage=='y':
-            #firstPrice = float(openData[initN])
             firstPrice = float(openData[len(dateData)-1])
-            for n in range(len(openData)): openData[n]*=100/firstPrice        
+            openData = [n*100/firstPrice for n in openData]    
 
         return dateData, openData     
 
@@ -194,7 +248,8 @@ def convertData(datStr):
 # cleans dataframe data        
 def dataClean(inptFrame):
     for n in ["AdjClose", "Close","High","Low","Open","Volume"]:
-        inptFrame[n] = map(convertData,inptFrame[n])   
+        inptFrame[n] = map(convertData,inptFrame[n])
+    inptFrame["Date"] = convertDate(inptFrame["Date"].tolist())   
     return inptFrame
 
 # createDatabase(databaseName)
@@ -202,6 +257,7 @@ def createDatabase(databasePath):
     # function which creates database
     # Check if database exists, if it does do nothing
     if os.path.isfile(databasePath) == False:
+    #if True:
         conn = sqlite3.connect(databasePath)  
         cursor = conn.cursor()
         
@@ -220,7 +276,7 @@ def createDatabase(databasePath):
 # convertDate(dateString)
 def convertDate(dateString):
     #takes a date input as a list of strings in the format 'mmm d, yyyy' and converts it to
-    #a date object
+    #yyyy-mm-dd
     # a dictionary to convert months to a number
     monthDict = {'Jan': '01', 'Feb':'02', 'Mar':'03','Apr':'04','May':'05','Jun':'06',
     'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
@@ -229,8 +285,18 @@ def convertDate(dateString):
         #splits the string
         splitDate = re.split('\W+',dateString[n])
         # cconverts the date into date object
-        dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[0]]),int(splitDate[1])) #y,m,d
-    return dateString   
+        dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[0]]),int(splitDate[1])).isoformat() #y,m,d
+    return dateString
+
+# convertDateSQL    
+def convertDateSQL(dateString):
+    #takes a date from SQL database as 'yyyy-mm-dd' and converts to datetimeobject   
+    for n in range(len(dateString)):
+        #splits the string
+        splitDate = map(int, dateString[n].split('-'))
+        # cconverts the date into date object
+        dateString[n] = datetime.date(splitDate[0],splitDate[1],splitDate[2]) #y,m,d
+    return dateString      
 
 #todaysDate()
 def todaysDate():
@@ -315,45 +381,52 @@ def negativeCorrelation(stockA, stockB):
 databasePath = "C:/Users/dlmca/OneDrive/Python/Canopy/StockCorellations/Databases/stockDataBase.db"
 createDatabase(databasePath)
 
-'''######### Clear db
-conn = sqlite3.connect(databasePath)
-stockDataFrameClear =  pd.DataFrame({'StockCode':[],'Date':[], 'Open':[], 'High':[], 'Low':[],\
+######## Clear db
+if False:
+    conn = sqlite3.connect(databasePath)
+    stockDataFrameClear =  pd.DataFrame({'StockCode':[],'Date':[], 'Open':[], 'High':[], 'Low':[],\
                     'Close':[], 'Volume':[], 'AdjClose':[]});     
-stockDataFrameClear.to_sql(name = 'stocks', con = conn, flavor ='sqlite', if_exists = 'replace')       
-conn.commit()
-conn.close() 
-##############'''
-        
+    stockDataFrameClear.to_sql(name = 'stocks', con = conn, flavor ='sqlite', if_exists = 'replace')       
+    conn.commit()
+    conn.close()
+#############
+      
 plt.close("all")      
 #USA S&P500 
 SP500 = Stock('^GSPC', databasePath)
-SP500_stockData = SP500.stockScrape()
-sqlQuery = """SELECT StockCode, Date, Open FROM stocks"""
-y = SP500.readDatabase(sqlQuery)
-SP500.plotStockData(percentage='n', plottype='m')
+SP500_stockData = SP500.updateStockData()
+SP500.plotStockData(percentage='y', plottype='m', startDate = '1990-01-15', endDate = '2016-04-26', dayMonthYear = 'q')
 
-   
+sqlQuery = """SELECT DISTINCT StockCode, Date, Open FROM stocks ORDER BY StockCode, Date DESC"""
+#sqlQuery = """SELECT StockCode, Date, Open FROM stocks WHERE Date BETWEEN '2016-03-23' AND '2016-06-25' AND StockCode = '^GSPC' ORDER BY Date DESC """
+#sqlQuery = """SELECT StockCode, CAST(Date AS VARCHAR) AS Date, Open FROM stocks WHERE StockCode = '^GSPC' ORDER BY StockCode, Date DESC """
+#sqlQuery = """SELECT StockCode, min(Date) AS Date, strftime('%m', Date) AS Month, strftime('%Y', Date) AS Year, Open FROM stocks WHERE Date BETWEEN '2000-02-23' AND '2016-06-25' AND StockCode = '^GSPC' GROUP BY Year, Month HAVING Month IN ('01', '04', '07', '10') ORDER BY Date DESC"""
+y = SP500.readDatabase(sqlQuery)
+y
+    
 #China Shanghai Composite
 SSEC = Stock('000001.SS', databasePath)
-SSEC_stockData = SSEC.stockScrape()
+SSEC_stockData = SSEC.updateStockData()
 SSEC.plotStockData(percentage='n', plottype='m')
 
-'''
+
 #Japan Nikei 225
-N225 = Stock('^N225')
-N225_stockData = N225.stockScrape()
-N225.plotStockData(percentage='n')
+N225 = Stock('^N225', databasePath)
+N225_stockData = N225.updateStockData()
+N225.plotStockData(percentage='n', plottype='m')
+
 
 #Australia S&P/ASX200
-ASX = Stock('^AXJO')
-ASX_stockData = ASX.stockScrape()
-ASX.plotStockData(percentage='n')
+ASX = Stock('^AXJO', databasePath)
+ASX_stockData = ASX.updateStockData()
+ASX.plotStockData(percentage='n', plottype='m', dayMonthYear = 'm')
 
 #England FTSE100
-FTSE = Stock('^FTSE')
-FTSE_stockData = FTSE.stockScrape()
-FTSE.plotStockData(percentage='n')
+FTSE = Stock('^FTSE', databasePath)
+FTSE_stockData = FTSE.updateStockData()
+FTSE.plotStockData(percentage='n', plottype='m', dayMonthYear = 'm')
 
+'''
 yearData, correlationSP500SSEC = stockCorrelation(SP500,SSEC)
 fracNegB = negativeCorrelation(SP500,SSEC)
 '''
