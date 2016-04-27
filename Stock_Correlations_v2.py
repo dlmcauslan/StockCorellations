@@ -16,7 +16,7 @@ Modified: 27/04/2016
 
 #Import libraries to use
 from bokeh.io import show, output_notebook
-from bokeh.plotting import figure
+from bokeh.plotting import figure, output_file, save
 from bokeh.models import DatetimeTickFormatter
 from bokeh.charts import Bar
 from bs4 import BeautifulSoup
@@ -220,8 +220,9 @@ class Stock(object):
     # plotStockDataBokeh(initialDate,finalDate)
     def plotStockDataBokeh(self, dateData, openData, percentage):
         #Plots Stock Data using Bokeh (in iPython or Jupyter notebook)        
+        output_file(self.stockName+".html", title=self.stockName)
         #Plots data
-        p = figure(plot_width=800, plot_height=350, title=self.stockName)
+        p = figure(plot_width=1200, plot_height=600, title=self.stockName)
         p.line(dateData, openData, line_width=2)
         p.xaxis.axis_label = "Date"      
         if percentage=='y':
@@ -229,7 +230,8 @@ class Stock(object):
         else:
             p.yaxis.axis_label = 'Index Level'
         p.xaxis[0].formatter = DatetimeTickFormatter(formats = dict(hours=["%B %Y"], days=["%B %Y"], months=["%B %Y"], years=["%B %Y"],)) 
-        show(p) # show the results 
+        #show(p) # show the results 
+        save(p)
         
     # convertPlotData(initialDate,finalDate)
     def convertPlotData(self, startDate, endDate, percentage, dayMonthYear):
@@ -356,9 +358,10 @@ def plotCorrelations(primaryStock, secondaryStocks, plotType='m'):
     if plotType=='m':            
         plt.figure()
     elif plotType=='b':
+        output_file(primaryStock.stockName+"correlations.html", title = "Correlations with " + primaryStock.stockName)
         colors = ['green','red','mediumblue','orange','purple','teal','gold']
         i=0
-        p = figure(plot_width=800, plot_height=350, title="Correlations with " + primaryStock.stockName)
+        p = figure(plot_width=1200, plot_height=600, title="Correlations with " + primaryStock.stockName)
         
     for stock in secondaryStocks:
         yearData, corrAB = primaryStock.stockCorrelation(stock)        
@@ -379,8 +382,8 @@ def plotCorrelations(primaryStock, secondaryStocks, plotType='m'):
         p.xaxis.axis_label = "Year"      
         p.yaxis.axis_label = 'Correlation coefficient'
         p.legend.location = "bottom_left"
-        show(p)
-
+        #show(p)
+        save(p)
 
 # Calculate the fraction of years that have a negative correlation
 def negativeCorrelation(stockA, stockB):
@@ -422,11 +425,13 @@ def plotNegativeCorrelations(stockList, plotType='m'):
         plt.show()
     #Plots data using Bokeh
     elif plotType=='b':
+        output_file("correlationsBar.html", title = "Proportion of Years the Stock Correlation Coefficient is Less than 0.")
         df = pd.DataFrame({'values':fracNeg, 'names':names})    
         p = figure(plot_width=800, plot_height=350, title="Correlations with S&P500")
         p = Bar(df, 'names', values='values', title = "Proportion of Years the Stock Correlation Coefficient is Less than 0.",
             xlabel="Stock pairing", ylabel="Proportion of years")
-        show(p)            
+        #show(p)  
+        save(p)          
         
 ### Code for downloading data and plotting it
 # Create SQL database
@@ -445,7 +450,8 @@ if False:
 #Plot using matplotlib ('m') or bokeh ('b')
 plotType = 'm'
 if plotType == 'b':
-    output_notebook()
+    #output_notebook()
+    print "Have changed this so plots save to disk. No longer requires Jupyter/Ipython. To use these again change save(p) to show(p)."
             
 plt.close("all")      
 #USA S&P500 
