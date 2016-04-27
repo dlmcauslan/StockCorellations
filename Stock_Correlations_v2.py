@@ -11,15 +11,12 @@ Modified: 27/04/2016
     Calculates correlations between pairs of stocks over the past 30 or so years
     and plots these.
     Calculates and plots the fraction of years that stock correlations are negative.
-        
-    To do:
-    Get Bokeh plots working, maybe
+    Added the option to plot using Matplotlib or Bokeh
 '''
 
 #Import libraries to use
 from bokeh.io import show, output_notebook
 from bokeh.plotting import figure
-from bokeh.embed import components
 from bokeh.models import DatetimeTickFormatter
 from bokeh.charts import Bar
 from bs4 import BeautifulSoup
@@ -224,15 +221,15 @@ class Stock(object):
     def plotStockDataBokeh(self, dateData, openData, percentage):
         #Plots Stock Data using Bokeh (in iPython or Jupyter notebook)        
         #Plots data
-        p = figure(plot_width=500, plot_height=500, title="Stock Indices")
+        p = figure(plot_width=800, plot_height=350, title=self.stockName)
         p.line(dateData, openData, line_width=2)
-        p.xaxis.axis_label = "Date"
+        p.xaxis.axis_label = "Date"      
         if percentage=='y':
-            p.yaxis.axis_label('Percentage')
+            p.yaxis.axis_label = 'Percentage'
         else:
-            p.yaxis.axis_label('Index Level')
+            p.yaxis.axis_label = 'Index Level'
+        p.xaxis[0].formatter = DatetimeTickFormatter(formats = dict(hours=["%B %Y"], days=["%B %Y"], months=["%B %Y"], years=["%B %Y"],)) 
         show(p) # show the results 
-        return p
         
     # convertPlotData(initialDate,finalDate)
     def convertPlotData(self, startDate, endDate, percentage, dayMonthYear):
@@ -355,19 +352,35 @@ def todaysDate():
 #plotCorrelations    
 def plotCorrelations(primaryStock, secondaryStocks, plotType='m'):
     #primaryStock is the name of the primary Stock, secondaryStock is a list
-    #containing the names of thes secondary stocks, plotType = 'm' (matplotlib) or 'b'(Bokeh)
-    plt.figure()
-    for stock in secondaryStocks:
-        yearData, corrAB = primaryStock.stockCorrelation(stock)
+    #containing the names of thes secondary stocks, plotType = 'm' (matplotlib) or 'b'(Bokeh)   
+    if plotType=='m':            
+        plt.figure()
+    elif plotType=='b':
+        colors = ['green','red','mediumblue','orange','purple','teal','gold']
+        i=0
+        p = figure(plot_width=800, plot_height=350, title="Correlations with " + primaryStock.stockName)
         
+    for stock in secondaryStocks:
+        yearData, corrAB = primaryStock.stockCorrelation(stock)        
         if plotType=='m':            
             plt.plot(yearData,corrAB,'-o')
+        elif plotType=='b':
+            p.line(yearData, corrAB, line_width=2, line_color=colors[i])
+            p.circle(yearData, corrAB, line_width=2, line_color=colors[i], legend = stock.stockName, fill_color="white", size=10)
+            i+=1
     
-    plt.xlabel('Year')
-    plt.ylabel('Correlation coefficient')
-    plt.title("Correlations with " + primaryStock.stockName)
-    plt.legend([n.stockName for n in [SSEC, N225, ASX, FTSE]], loc=3)
-    plt.show()
+    if plotType=='m':            
+        plt.xlabel('Year')
+        plt.ylabel('Correlation coefficient')
+        plt.title("Correlations with " + primaryStock.stockName)
+        plt.legend([n.stockName for n in secondaryStocks], loc=3)
+        plt.show()
+    elif plotType=='b':
+        p.xaxis.axis_label = "Year"      
+        p.yaxis.axis_label = 'Correlation coefficient'
+        p.legend.location = "bottom_left"
+        show(p)
+
 
 # Calculate the fraction of years that have a negative correlation
 def negativeCorrelation(stockA, stockB):
@@ -402,11 +415,18 @@ def plotNegativeCorrelations(stockList, plotType='m'):
     if plotType=='m':
         plt.figure()            
         plt.bar(range(len(fracNeg)), fracNeg, width=0.9)   
-        plt.ylabel('Proportion of Years')
-        plt.xlabel('Stock Pairing')
+        plt.ylabel('Proportion of years')
+        plt.xlabel('Stock pairing')
         plt.title("Proportion of Years the Stock Correlation Coefficient is Less than 0.")
         plt.xticks(np.arange(len(fracNeg))+.45, names, rotation='horizontal')
-        plt.show()            
+        plt.show()
+    #Plots data using Bokeh
+    elif plotType=='b':
+        df = pd.DataFrame({'values':fracNeg, 'names':names})    
+        p = figure(plot_width=800, plot_height=350, title="Correlations with S&P500")
+        p = Bar(df, 'names', values='values', title = "Proportion of Years the Stock Correlation Coefficient is Less than 0.",
+            xlabel="Stock pairing", ylabel="Proportion of years")
+        show(p)            
         
 ### Code for downloading data and plotting it
 # Create SQL database
@@ -431,16 +451,16 @@ plt.close("all")
 #USA S&P500 
 SP500 = Stock('^GSPC', databasePath)
 SP500_stockData = SP500.updateStockData()
-SP500.plotStockData(percentage='y', plottype='m', startDate = '1990-01-15', endDate = '2016-04-26', dayMonthYear = 'd')
+SP500.plotStockData(percentage='y', plottype=plotType, startDate = '1990-01-15', endDate = '2016-04-26', dayMonthYear = 'd')
 
 #### TEST SQL QUERIES
-sqlQuery = """SELECT DISTINCT StockCode, Date, Open FROM stocks ORDER BY StockCode, Date DESC"""
+'''sqlQuery = """SELECT DISTINCT StockCode, Date, Open FROM stocks ORDER BY StockCode, Date DESC"""
 #sqlQuery = """SELECT StockCode, Date, Open FROM stocks WHERE Date BETWEEN '2016-03-23' AND '2016-06-25' AND StockCode = '^GSPC' ORDER BY Date DESC """
 #sqlQuery = """SELECT StockCode, CAST(Date AS VARCHAR) AS Date, Open FROM stocks WHERE StockCode = '^GSPC' ORDER BY StockCode, Date DESC """
 #sqlQuery = """SELECT StockCode, min(Date) AS Date, strftime('%m', Date) AS Month, strftime('%Y', Date) AS Year, Open FROM stocks WHERE Date BETWEEN '2000-02-23' AND '2016-06-25' AND StockCode = '^GSPC' GROUP BY Year, Month HAVING Month IN ('01', '04', '07', '10') ORDER BY Date DESC"""
 sqlQuery = """SELECT StockCode, Date, Open, CAST(strftime('%Y', Date) AS INT) AS Year FROM stocks WHERE StockCode = '^GSPC' ORDER BY Date DESC """
 y = SP500.readDatabase(sqlQuery)
-y
+y'''
 ##########
     
 #China Shanghai Composite
