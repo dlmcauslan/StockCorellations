@@ -7,16 +7,14 @@ Modified: 25/04/2016
     Clean the data when it is scraped instead of everytime it is accessed now.
     Data is saved in a single SQL database now with a reference column StockCode
     that describes which stock it is. This is instead of saving as a csv file.
-    
+Modified: 27/04/2016
+    Calculates correlations between pairs of stocks over the past 30 or so years
+    and plots these.
+    Calculates and plots the fraction of years that stock correlations are negative.
+        
     To do:
-    Plot different plots on single graph - return plot handle in plot function.
-    Readd plotting corellations etc
     Get Bokeh plots working, maybe
 '''
-
-########## Need to come up with new URL plan because it doesn't work over the weekends! - might need to add a break statement instead
-########## Remember to change testURL in updateStockData - Fix URLs
-
 
 #Import libraries to use
 from bokeh.io import show, output_notebook
@@ -45,9 +43,8 @@ class Stock(object):
     
     # updateStockData()
     def updateStockData(self):
-        # Checks whether stock is in database, if not it runs initialStockScrape.
-        #If it is in data base it checks whether the stock information is up to date (checks dataBase) and if
-        # not, runs updateStockScrape()
+        # Checks whether stock is in database, if not it stockScrape to get all the data.
+        #If it is in data base it checks whether the stock information is up to date and only fetches new data
         # Reads database
         format_str = """SELECT StockCode FROM stocks WHERE StockCode = '{name}'; """
         sqlQuery = format_str.format(name = self.stockName)
@@ -66,8 +63,8 @@ class Stock(object):
             # Performs SQL query to get the latest stock data date in database
             format_str = """SELECT StockCode, max(Date) AS Date FROM stocks WHERE StockCode = '{name}' GROUP BY StockCode"""
             sqlQuery = format_str.format(name = self.stockName)
-            y = self.readDatabase(sqlQuery)
-            minDate = y.Date[0]
+            y = self.readDatabase(sqlQuery)            
+            minDate = y.Date[0]    # minDate is the earliest data of data that the program needs to download
             # Updates stock data
             self.stockScrape(minDate)                     
     
@@ -96,7 +93,6 @@ class Stock(object):
             #breaks loop if it doesnt find a table
             if table==None:
                 done = True
-                print "Table=None"
                 break                
             
             #takes data from soup and processes it into a way that can be used 
@@ -110,8 +106,6 @@ class Stock(object):
                         if len(rowTemp)%7==0:
                             # If date is less than the minimum date then stop getting data
                             if convertDate([rowTemp[0]])[0] <= minDate:
-                                print convertDate([rowTemp[0]])[0]
-                                print minDate
                                 done = True
                                 break                                
                             stockDataFrame = stockDataFrame.append(pd.DataFrame([rowTemp], columns=colName), ignore_index=True)
@@ -150,7 +144,52 @@ class Stock(object):
         conn = sqlite3.connect(self.databasePath)        
         dataFrame = pd.read_sql(sqlQuery, conn)
         conn.close() 
-        return dataFrame   
+        return dataFrame
+        
+   # Calculate stock correlations
+    def stockCorrelation(self, stockB):
+        #Read in data frames for both stocks   
+        format_str = """SELECT StockCode, Date, Open, CAST(strftime('%Y', Date) AS INT) AS Year 
+                            FROM stocks
+                            WHERE StockCode = '{name}'
+                            ORDER BY Date DESC """
+        sqlQuery = format_str.format(name = self.stockName)
+        stockDataFrameA = self.readDatabase(sqlQuery)
+        sqlQuery = format_str.format(name = stockB.stockName)
+        stockDataFrameB = stockB.readDatabase(sqlQuery)
+    
+        # Find the first year with complete data
+        minYear = max(min(stockDataFrameA["Year"]), min(stockDataFrameB["Year"]))+1
+        # Years to iterate over
+        years = range(minYear,datetime.date.today().year)
+        # Create empty numpy arrays to store data in
+        meanA = np.zeros(len(years))
+        stdA = np.zeros(len(years))
+        meanB = np.zeros(len(years))
+        stdB = np.zeros(len(years))
+        cover = np.zeros(len(years))
+    
+        # Iterate over years
+        for n in range(len(years)):
+            # Calculate some properties of A
+            tmpDataA = stockDataFrameA.Open[stockDataFrameA["Year"]==years[n]]
+            meanA[n] = tmpDataA.mean()
+            stdA[n] = float(tmpDataA.std())
+            diffMeanA = tmpDataA - meanA[n]
+            # Calculate some properties of B
+            tmpDataB = stockDataFrameB.Open[stockDataFrameB["Year"]==years[n]]
+            meanB[n] = tmpDataB.mean()
+            stdB[n] = float(tmpDataB.std())
+            diffMeanB = tmpDataB - meanB[n]
+            # Make sure vectors are the same length
+            minLength = min(len(tmpDataA),len(tmpDataB))
+            #Covariance COVER = { (X1-Mx)(Y1-My) + (X2-Mx)(Y2-My) + ...+ (Xn-Mx)(Yn-My) }/n
+            cover[n] = np.dot(diffMeanA[:minLength], diffMeanB[:minLength])/minLength
+        
+        # correlation Correlation = COVER / ( Sx Sy)
+        correlation = cover/(stdA*stdB)    
+
+        return years, correlation   
 
     def plotStockData(self, percentage='n', plottype='m', startDate='1800-01-01', endDate='2200-01-01', dayMonthYear = 'd'):
         # Percentage 'y' or 'n' whether you want the y axis as a percentage or not.
@@ -183,7 +222,6 @@ class Stock(object):
             
     # plotStockDataBokeh(initialDate,finalDate)
     def plotStockDataBokeh(self, dateData, openData, percentage):
-        output_notebook()
         #Plots Stock Data using Bokeh (in iPython or Jupyter notebook)        
         #Plots data
         p = figure(plot_width=500, plot_height=500, title="Stock Indices")
@@ -257,7 +295,6 @@ def createDatabase(databasePath):
     # function which creates database
     # Check if database exists, if it does do nothing
     if os.path.isfile(databasePath) == False:
-    #if True:
         conn = sqlite3.connect(databasePath)  
         cursor = conn.cursor()
         
@@ -315,59 +352,27 @@ def todaysDate():
         
     return day, month, year
 
-# Calculate stock correlations
-def stockCorrelation(stockA, stockB):
-    #Read in data frames for both stocks
-    stockDataFrameA = pd.read_csv(stockA.stockName + '_data.csv')
-    stockDataFrameB = pd.read_csv(stockB.stockName + '_data.csv')
-    dateDataA = convertDate(stockDataFrameA["Date"].tolist())
-    dateDataB = convertDate(stockDataFrameB["Date"].tolist())
-    yearA = [n.year for n in dateDataA]
-    yearB = [n.year for n in dateDataB]
-    # Add a column to the data frame for the year
-    stockDataFrameA["Year"] = yearA
-    stockDataFrameB["Year"] = yearB
-    '''# Add a column to the dataframe with clean price information
-    #stockDataFrameA["OpenClean"] = [float(''.join(re.split('\,',i))) for i in stockDataFrameA["Open"]]
-    #stockDataFrameB["OpenClean"] = [float(''.join(re.split('\,',i))) for i in stockDataFrameB["Open"]]'''
-    
-    # Find the first year with complete data
-    minYear = max(min(yearA), min(yearB))+1
-    # Years to iterate over
-    years = range(minYear,datetime.date.today().year)
-    # Create empty numpy arrays to store data in
-    meanA = np.zeros(len(years))
-    stdA = np.zeros(len(years))
-    meanB = np.zeros(len(years))
-    stdB = np.zeros(len(years))
-    cover = np.zeros(len(years))
-    
-    # Iterate over years
-    for n in range(len(years)):
-        # Calculate some properties of A
-        tmpDataA = stockDataFrameA.Open[stockDataFrameA["Year"]==years[n]]
-        meanA[n] = tmpDataA.mean()
-        stdA[n] = float(tmpDataA.std())
-        diffMeanA = tmpDataA - meanA[n]
-        # Calculate some properties of B
-        tmpDataB = stockDataFrameB.Open[stockDataFrameB["Year"]==years[n]]
-        meanB[n] = tmpDataB.mean()
-        stdB[n] = float(tmpDataB.std())
-        diffMeanB = tmpDataB - meanB[n]
-        # Make sure vectors are the same length
-        minLength = min(len(tmpDataA),len(tmpDataB))
-        #Covariance COVER = { (X1-Mx)(Y1-My) + (X2-Mx)(Y2-My) + ...+ (Xn-Mx)(Yn-My) }/n
-        cover[n] = np.dot(diffMeanA[:minLength], diffMeanB[:minLength])/minLength
+#plotCorrelations    
+def plotCorrelations(primaryStock, secondaryStocks, plotType='m'):
+    #primaryStock is the name of the primary Stock, secondaryStock is a list
+    #containing the names of thes secondary stocks, plotType = 'm' (matplotlib) or 'b'(Bokeh)
+    plt.figure()
+    for stock in secondaryStocks:
+        yearData, corrAB = primaryStock.stockCorrelation(stock)
         
-    # correlation Correlation = COVER / ( Sx Sy)
-    correlation = cover/(stdA*stdB)    
-
-    return years, correlation
+        if plotType=='m':            
+            plt.plot(yearData,corrAB,'-o')
+    
+    plt.xlabel('Year')
+    plt.ylabel('Correlation coefficient')
+    plt.title("Correlations with " + primaryStock.stockName)
+    plt.legend([n.stockName for n in [SSEC, N225, ASX, FTSE]], loc=3)
+    plt.show()
 
 # Calculate the fraction of years that have a negative correlation
 def negativeCorrelation(stockA, stockB):
     #Calculate the correlations between Index A and B for each year
-    years, correlation = stockCorrelation(stockA, stockB) 
+    years, correlation = stockA.stockCorrelation(stockB) 
     # Find what years the correlations are negative
     boolVect = np.array(correlation)<0
     # Count the number of negative years
@@ -375,13 +380,40 @@ def negativeCorrelation(stockA, stockB):
     # Calculate the fraction of negative years
     fractionNegative = numNegatives/float(len(correlation))
     return fractionNegative
-   
+
+
+#plotCorrelations    
+def plotNegativeCorrelations(stockList, plotType='m'):
+    #stockList is a list of the stocks to have their correlations compared
+    #containing the names of thes secondary stocks, plotType = 'm' (matplotlib) or 'b'(Bokeh)
+    fracNeg=[]
+    names =[]
+    #Calculate the fraction of years that have a negative correlation for all pairs
+    # of stocks in stockList
+    for i in xrange(len(stockList)-1):
+        stockA = stockList[i]
+        for stockB in stockList[i+1:]:
+            #Calculates negative correlation fraction
+            fracNeg.append(negativeCorrelation(stockA,stockB))
+            #Gives names of stock pairs. For x tick labels
+            names.append(stockA.stockName + '--' + stockB.stockName)
+    
+    #Plot as matplotlib
+    if plotType=='m':
+        plt.figure()            
+        plt.bar(range(len(fracNeg)), fracNeg, width=0.9)   
+        plt.ylabel('Proportion of Years')
+        plt.xlabel('Stock Pairing')
+        plt.title("Proportion of Years the Stock Correlation Coefficient is Less than 0.")
+        plt.xticks(np.arange(len(fracNeg))+.45, names, rotation='horizontal')
+        plt.show()            
+        
 ### Code for downloading data and plotting it
 # Create SQL database
 databasePath = "C:/Users/dlmca/OneDrive/Python/Canopy/StockCorellations/Databases/stockDataBase.db"
 createDatabase(databasePath)
 
-######## Clear db
+######## Clear db (set to True if you need to clear the data)
 if False:
     conn = sqlite3.connect(databasePath)
     stockDataFrameClear =  pd.DataFrame({'StockCode':[],'Date':[], 'Open':[], 'High':[], 'Low':[],\
@@ -390,44 +422,50 @@ if False:
     conn.commit()
     conn.close()
 #############
-      
+#Plot using matplotlib ('m') or bokeh ('b')
+plotType = 'm'
+if plotType == 'b':
+    output_notebook()
+            
 plt.close("all")      
 #USA S&P500 
 SP500 = Stock('^GSPC', databasePath)
 SP500_stockData = SP500.updateStockData()
-SP500.plotStockData(percentage='y', plottype='m', startDate = '1990-01-15', endDate = '2016-04-26', dayMonthYear = 'q')
+SP500.plotStockData(percentage='y', plottype='m', startDate = '1990-01-15', endDate = '2016-04-26', dayMonthYear = 'd')
 
+#### TEST SQL QUERIES
 sqlQuery = """SELECT DISTINCT StockCode, Date, Open FROM stocks ORDER BY StockCode, Date DESC"""
 #sqlQuery = """SELECT StockCode, Date, Open FROM stocks WHERE Date BETWEEN '2016-03-23' AND '2016-06-25' AND StockCode = '^GSPC' ORDER BY Date DESC """
 #sqlQuery = """SELECT StockCode, CAST(Date AS VARCHAR) AS Date, Open FROM stocks WHERE StockCode = '^GSPC' ORDER BY StockCode, Date DESC """
 #sqlQuery = """SELECT StockCode, min(Date) AS Date, strftime('%m', Date) AS Month, strftime('%Y', Date) AS Year, Open FROM stocks WHERE Date BETWEEN '2000-02-23' AND '2016-06-25' AND StockCode = '^GSPC' GROUP BY Year, Month HAVING Month IN ('01', '04', '07', '10') ORDER BY Date DESC"""
+sqlQuery = """SELECT StockCode, Date, Open, CAST(strftime('%Y', Date) AS INT) AS Year FROM stocks WHERE StockCode = '^GSPC' ORDER BY Date DESC """
 y = SP500.readDatabase(sqlQuery)
 y
+##########
     
 #China Shanghai Composite
 SSEC = Stock('000001.SS', databasePath)
 SSEC_stockData = SSEC.updateStockData()
-SSEC.plotStockData(percentage='n', plottype='m')
+SSEC.plotStockData(percentage='n', plottype=plotType)
 
 
 #Japan Nikei 225
 N225 = Stock('^N225', databasePath)
 N225_stockData = N225.updateStockData()
-N225.plotStockData(percentage='n', plottype='m')
+N225.plotStockData(percentage='n', plottype=plotType)
 
 
 #Australia S&P/ASX200
 ASX = Stock('^AXJO', databasePath)
 ASX_stockData = ASX.updateStockData()
-ASX.plotStockData(percentage='n', plottype='m', dayMonthYear = 'm')
+ASX.plotStockData(percentage='n', plottype=plotType, dayMonthYear = 'm')
 
 #England FTSE100
 FTSE = Stock('^FTSE', databasePath)
 FTSE_stockData = FTSE.updateStockData()
-FTSE.plotStockData(percentage='n', plottype='m', dayMonthYear = 'm')
+FTSE.plotStockData(percentage='n', plottype=plotType, dayMonthYear = 'm')
 
-'''
-yearData, correlationSP500SSEC = stockCorrelation(SP500,SSEC)
-fracNegB = negativeCorrelation(SP500,SSEC)
-'''
+#### Correlations
+plotCorrelations(SP500, [SSEC, N225, ASX, FTSE], plotType=plotType)
+plotNegativeCorrelations([SP500, SSEC, N225, ASX, FTSE], plotType=plotType)
 
